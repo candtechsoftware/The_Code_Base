@@ -1,0 +1,1 @@
+#load "platform/module.jai"; 

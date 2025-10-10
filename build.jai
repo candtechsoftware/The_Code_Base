@@ -26,9 +26,6 @@ process_args :: (opts: *Build_Options, args: []string) {
                     set_build_options_dc(.{interactive_bytecode_debugger=true});
                 case "-quiet"; 
                     opts.text_output_flags = 0;
-                case;
-                    log_error("Invalid argument: %\n", args[index]);
-                    exit(1);
             } 
         }
     } 
