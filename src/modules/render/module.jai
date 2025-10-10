@@ -46,16 +46,10 @@ Render_Batch :: struct {
     byte_cap:   u64; 
 } 
 
-Render_Batch_Node :: struct {
-    next: *Render_Batch_Node; 
-    v:    Render_Batch; 
-} 
-
 Render_Batch_List :: struct {
-    allocator:    Allocator;
-    first:        *Render_Batch_Node;
-    last:         *Render_Batch_Node;
+    #as using inner: Link_List(Render_Batch);
 
+    allocator:          Allocator;
     batch_count:        u64; 
     byte_count:         u64;
     bytes_per_instance: u64; 
@@ -215,7 +209,7 @@ render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) ->
             n = New(Render_Batch_Node);
             n.v.byte_cap = batch_instance_cap * list.bytes_per_instance; 
             n.v.v = NewArray(n.v.byte_cap, u8);
-            SLL_QUEUE_PUSH(list.first, list.last, n); 
+            link_list_push(list.first, list.last, n); 
             list.batch_count += 1; 
         }    
         instance = n.v.v + n.v.byte_count; 

@@ -53,17 +53,17 @@ Render_Handle :: union {
     u16s: [3]u16;
 } 
 
-SLL :: struct(T: Type) { 
-    first: *SLL_Node(T);
-    last:  *SLL_Node(T);
+Link_List :: struct(T: Type) {
+    first: *Link_List_Node(T);
+    last:  *Link_List_Node(T);
 } 
 
-SLL_Node :: struct(T: Type) {
-    next: *SLL_Node(T);
+Link_List_Node :: struct(T: Type) {
+    next: *Link_List_Node(T);
     value: T;
 };
 
-SLL_PUSH :: (list: *SLL, node: *SLL_Node) {
+link_list_push :: (list: *Link_List, node: *Link_List_Node) {
     if list.first == null {
         list.first = node; 
         list.last = node; 
@@ -75,15 +75,8 @@ SLL_PUSH :: (list: *SLL, node: *SLL_Node) {
     } 
 } 
 
-Item :: struct {
-    v: u32;
-} 
 
-Item_SLL :: struct {
-    #as using inner: SLL(Item);
-} 
-
-print_sll :: (list: *SLL) {
+link_list_print :: (list: *Link_List) {
     sb: String_Builder;
     while list.first != list.last {
         if list.first  {
@@ -95,24 +88,6 @@ print_sll :: (list: *SLL) {
     str := builder_to_string(*sb);
     print("%\n",str); 
 } 
-
-main :: () {
-    r: Item_SLL;
-    i := New(SLL_Node(Item));
-    i.value = .{32};
-
-    SLL_PUSH(*r, i);
-
-    b:= New(SLL_Node(Item));
-    b.value = .{32};
-    SLL_PUSH(*r, b);
-
-    a:= New(SLL_Node(Item));
-    a.value = .{32};
-    SLL_PUSH(*r, a);
-    print_sll(*r); 
-} 
-
 
 
 #import "Basic";
