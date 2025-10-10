@@ -1,4 +1,4 @@
-#if OS :::: {
+#if OS == {
     case .LINUX; #load "render_vulkan.jai";
     case .MACOS; #load "render_metal.jai";
 }
@@ -196,11 +196,11 @@ render_batch_list_create :: (instance_size: u64) -> Render_Batch_List {
     r: Render_Batch_List;
     list.bytes_per_instance = instance_size; 
     pool                    := New(Flat_Pool);  // @TODO: should create own arena
-    list.allocator:         = Allocator.{flat_pool_allocator_proc, pool};
+    list.allocator          = Allocator.{flat_pool_allocator_proc, pool};
     return list; 
 } 
 
-render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) -> void *{
+render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) -> *void {
     push_allocator(list.allocator);
     instance : *void = null;
     {
@@ -213,7 +213,8 @@ render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) ->
             list.batch_count += 1; 
         }    
         instance = n.v.v + n.v.byte_count; 
-        n.v
+        n.v.byte_count += list.bytes_per_instance; 
+        list.byte_count += list.bytes_per_instance;
     } 
     return instance;
 } 
