@@ -3,12 +3,18 @@
     case .MACOS; #load "render_metal.jai";
 }
 
+
+Render_Resource_Kind :: enum {
+    STATIC; 
+    DYNAMIC; 
+}
+
 Render_Geo_Vertex_Flags :: enum_flags u32  {
     TEXCOORD :: (1<<0);
     NORMALS  :: (1<<1);
     RGB      :: (1<<2);
     RGBA     :: (1<<3);
-};
+}
 
 Render_Geo_Topology_Kind :: enum  {
     R_GeoTopologyKind_Lines;
@@ -17,7 +23,7 @@ Render_Geo_Topology_Kind :: enum  {
     R_GEOTOPOLOGYKIND_TRIANGLESTRIP;
 }
 
-RENDER_GEO_TOPOLOGY_KIND_COUNT :: #run enum_highest_value(RENDER_GEO_TOPOLOGY_KIND) + 1;
+RENDER_GEO_TOPOLOGY_KIND_COUNT :: #run enum_highest_value(Render_Geo_Topology_Kind) + 1;
 
 Render_Handle :: union {
     u64s: [1]u64; 
@@ -219,9 +225,54 @@ render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) ->
     return instance;
 } 
 
+render_pass_from_kind :: (list: *Render_Pass_List, kind: Render_Pass_Kind) -> *Render_Pass {
+    push_allocator(list.allocator);
+    new_node := New(Render_Pass_Node); 
+    new_node.next = null;
+
+    if list.last != null {
+        list.last.next = new_node; 
+        list.last = new_node; 
+    } else {
+        list.first = list.last = new_node; 
+    } 
+
+    list.count += 1;
+    
+
+    if kind == {
+    case .UI; 
+        {
+            pass := cast(*Render_Pass_UI)*new_node.val;
+            pass.kind = kind; 
+            pass.params = New(Render_Pass_UI_Params);
+            return pass;
+
+        }
+    case .BLUR; 
+        {
+            pass := cast(*Render_Pass_Blur)*new_node.val;
+            pass.kind = kind; 
+            pass.params = New(Render_Pass_Blur_Params);
+            return pass;
+        }
+    case .GEO3D; 
+        {
+            pass := cast(*Render_Pass_Geo)*new_node.val;
+            pass.kind = kind; 
+            pass.params = New(Render_Pass_Geo_Params);
+            return pass;
+        }
+    } 
+
+    log_error("Incompatible pass type %\n", kind);
+    return null;
+} 
+
 
 
 
 #import "Math";
 #import "Basic"; 
 #import "Flat_Pool";
+#import "base";

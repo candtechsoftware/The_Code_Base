@@ -34,5 +34,4 @@ link_list_print :: (list: *Link_List) {
     print("%\n",str); 
 } 
 
-
 #import "Basic";
