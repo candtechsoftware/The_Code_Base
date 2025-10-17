@@ -182,9 +182,7 @@ render_init :: () {
     MTLSamplerDescriptor.setMagFilter(font_sample_desc, .MTLSamplerMinMagFilterLinear);
     MTLSamplerDescriptor.setSAddressMode(font_sample_desc,   .MTLSamplerAddressModeClampToEdge);
     MTLSamplerDescriptor.setTAddressMode(font_sample_desc,   .MTLSamplerAddressModeClampToEdge);
-    print("Hello 1 %  == %\n", font_sample_desc, r_metal_state.device);
     r_metal_state.font_sampler = MTLDevice.newSamplerStateWithDescriptor(r_metal_state.device, font_sample_desc);
-    print("Hello 2 %  == %\n", r_metal_state, r_metal_state.device);
 
     for 0..METAL_FRAMES_IN_FLIGHT-1 {
         r_metal_state.frames[it].semaphore = dispatch_semaphore_create(1); 
@@ -206,7 +204,6 @@ render_init :: () {
         } 
 
     } 
-    print("Hello 2 %  == %\n", r_metal_state, r_metal_state.device);
 
     r_metal_state.current_frame_index = 0; 
 
@@ -231,18 +228,150 @@ render_init :: () {
 }
 
 
+// @TODO(Alex) we need to make this more general for the future to 
+// accept shaders at runtime and recompile
 render_metal_init_shaders :: () {
     assert(r_metal_state != null); 
 
     log("Starting Metal shader initialization\n");
-
     err := New(NSError); 
     push_allocator(temp);
-    shader_path  := #filepath; 
-    print("shader_path %\n", shader_path); 
+    {  // RECT SHADER
+        // @TODO(Alex): this may not work in deployed version need to validate later
+        shader_path  := tprint("%/shaders/metal/rect.metal", #filepath);
+        data, file_ok := read_entire_file(shader_path);
+        assert(file_ok, tprint("Failed to read file at %", shader_path));
+        assert(data.count != 0);
+
+        source_str := CFStringCreateWithCString(null, data.data, CFStringEncoding.UTF8);
+        error: *NSError = null;
+        rect_library := MTLDevice.newLibraryWithSource_options_error(r_metal_state.device, cast(*NSString) source_str, null, *error);
+        CFRelease(source_str);
+        assert(rect_library != null, "Failed to compile Metal shaders from source");
+        vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("rect_vertex_main"));
+        fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("rect_fragment_main"));
+        assert(vertex_function && fragment_function, "Failed to find functions"); 
+        pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
+        MTLRenderPipelineDescriptor.setVertexFunction(pipeline_desc, vertex_function);
+        MTLRenderPipelineDescriptor.setFragmentFunction(pipeline_desc, fragment_function);
+        color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
+        color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
+        MTLRenderPipelineColorAttachmentDescriptor.setBlendingEnabled(color_attachment_0,            YES);  
+        MTLRenderPipelineColorAttachmentDescriptor.setRgbBlendOperation(color_attachment_0,          .MTLBlendOperationAdd); 
+        MTLRenderPipelineColorAttachmentDescriptor.setAlphaBlendOperation(color_attachment_0,        .MTLBlendOperationAdd); 
+        MTLRenderPipelineColorAttachmentDescriptor.setSourceRGBBlendFactor(color_attachment_0,       .MTLBlendFactorSourceAlpha); 
+        MTLRenderPipelineColorAttachmentDescriptor.setSourceAlphaBlendFactor(color_attachment_0,     .MTLBlendFactorOne); 
+        MTLRenderPipelineColorAttachmentDescriptor.setDestinationRGBBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha); 
+        MTLRenderPipelineColorAttachmentDescriptor.setDestinationAlphaBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha); 
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4); 
+        r_metal_state.pipelines[Render_Metal_Shader_Kind.RECT].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
+        assert(!error, "Failed to get pipeline state");
+        log("Created rect pipeline_state\n");
+
+    }
+    {  // BLUR SHADER
+        shader_path  := tprint("%/shaders/metal/blur.metal", #filepath);
+        data, file_ok := read_entire_file(shader_path);
+        assert(file_ok, tprint("Failed to read file at %", shader_path));
+        assert(data.count != 0);
+
+        source_str := CFStringCreateWithCString(null, data.data, CFStringEncoding.UTF8);
+        error: *NSError = null;
+        rect_library := MTLDevice.newLibraryWithSource_options_error(r_metal_state.device, cast(*NSString) source_str, null, *error);
+        CFRelease(source_str);
+        assert(rect_library != null, "Failed to compile Metal shaders from source");
+        vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("blur_vertex_main"));
+        fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("blur_fragment_main"));
+        assert(vertex_function && fragment_function, "Failed to find functions"); 
 
 
+        pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
+        MTLRenderPipelineDescriptor.setVertexFunction(pipeline_desc, vertex_function);
+        MTLRenderPipelineDescriptor.setFragmentFunction(pipeline_desc, fragment_function);
 
+        color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
+        color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4); 
+        r_metal_state.pipelines[Render_Metal_Shader_Kind.BLUR].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
+        assert(!error, "Failed to get pipeline state");
+        log("Created blur pipeline_state\n");
+
+    }
+    { // MESH SHADER
+        // @TODO(Alex): this may not work in deployed version need to validate later
+        shader_path  := tprint("%/shaders/metal/mesh.metal", #filepath);
+        data, file_ok := read_entire_file(shader_path);
+        assert(file_ok, tprint("Failed to read file at %", shader_path));
+        assert(data.count != 0);
+
+        source_str := CFStringCreateWithCString(null, data.data, CFStringEncoding.UTF8);
+        error: *NSError = null;
+        rect_library := MTLDevice.newLibraryWithSource_options_error(r_metal_state.device, cast(*NSString) source_str, null, *error);
+        CFRelease(source_str);
+        assert(rect_library != null, "Failed to compile Metal shaders from source");
+        vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("mesh_vertex_main"));
+        fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("mesh_fragment_main"));
+        assert(vertex_function && fragment_function, "Failed to find functions"); 
+        pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
+
+        offset := 0;
+        vertex_desc       := MTLRenderPipelineDescriptor.vertexDescriptor(pipeline_desc);
+        vertex_attributes := MTLVertexDescriptor.attributes(vertex_desc);
+
+        // Position 
+        vertex_attr_0 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 0);
+        MTLVertexAttributeDescriptor.setFormat(vertex_attr_0, .MTLVertexFormatFloat3);
+        MTLVertexAttributeDescriptor.setOffset(vertex_attr_0, xx offset);
+        MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_0, 0);
+        offset += size_of(float) * 3;
+
+        // Texcoord 
+        vertex_attr_1 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 1);
+        MTLVertexAttributeDescriptor.setFormat(vertex_attr_1, .MTLVertexFormatFloat2);
+        MTLVertexAttributeDescriptor.setOffset(vertex_attr_1, xx offset);
+        MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_1, 0);
+        offset += size_of(float) * 2;
+
+        // Normal
+        vertex_attr_2 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 2);
+        MTLVertexAttributeDescriptor.setFormat(vertex_attr_2, .MTLVertexFormatFloat3);
+        MTLVertexAttributeDescriptor.setOffset(vertex_attr_2, xx offset);
+        MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_2, 0);
+        offset += size_of(float) * 3;
+
+        // Color 
+        vertex_attr_3 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 3);
+        MTLVertexAttributeDescriptor.setFormat(vertex_attr_3, .MTLVertexFormatFloat4);
+        MTLVertexAttributeDescriptor.setOffset(vertex_attr_3, xx offset);
+        MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_3, 0);
+        offset += size_of(float) * 4;
+
+        vertex_layouts := MTLVertexDescriptor.layouts(vertex_desc);
+        vertex_layout_0 := MTLVertexBufferLayoutDescriptorArray.objectAtIndexedSubscript(vertex_layouts, 0);
+        MTLVertexBufferLayoutDescriptor.setStride(vertex_layout_0, xx offset);
+        MTLVertexBufferLayoutDescriptor.setStepRate(vertex_layout_0, xx 1);
+        MTLVertexBufferLayoutDescriptor.setStepFunction(vertex_layout_0, .MTLVertexStepFunctionPerVertex);
+
+        
+        MTLRenderPipelineDescriptor.setVertexFunction(pipeline_desc, vertex_function);
+        MTLRenderPipelineDescriptor.setFragmentFunction(pipeline_desc, fragment_function);
+
+        color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
+        color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
+
+        MTLRenderPipelineDescriptor.setDepthAttachmentPixelFormat(pipeline_desc,    .MTLPixelFormatDepth32Float); 
+        MTLRenderPipelineDescriptor.setRasterizationEnabled(pipeline_desc,          YES); 
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,             xx 4); 
+        r_metal_state.pipelines[Render_Metal_Shader_Kind.MESH].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
+
+        assert(!error, "Failed to get pipeline state");
+        log("Created mesh pipeline_state\n");
+    }
+
+    reset_temporary_storage();
 }
 
 
@@ -252,4 +381,4 @@ render_metal_init_shaders :: () {
 #import "macos";
 #import "Flat_Pool";
 #import "Math";
-
+#import "File";
