@@ -19,6 +19,8 @@ main :: () {
     } 
 
     app_state = New(App_State); 
+    render_init();
+
 
 
     while app_state.running {
