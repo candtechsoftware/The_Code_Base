@@ -1,4 +1,3 @@
-
 #scope_file
 
 METAL_FRAMES_IN_FLIGHT          :: 2;
@@ -6,75 +5,75 @@ METAL_BUFFER_POOL_SIZE          :: 256;
 METAL_BUFFER_POOL_MIN_SIZE      :: (16 * 1024);
 METAL_BUFFER_POOL_GROWTH_FACTOR :: 2;
 Render_Metal_Shader_Kind :: enum {
-    RECT; 
-    BLUR; 
-    MESH; 
-} 
+    RECT;
+    BLUR;
+    MESH;
+}
 
 Render_Metal_Shader_Kind_COUNT :: #run enum_highest_value(Render_Metal_Shader_Kind) + 1;
 
 Render_Metal_Texure_2D :: struct {
     texture: *void;
-    sampler: *void; 
-    size:     Vector2; 
-    format:   Render_Texture_2D_Format; 
-    kind:     Render_Resource_Kind; 
-} 
+    sampler: *void;
+    size:     Vec2(float64);
+    format:   Render_Texture_2D_Format;
+    kind:     Render_Resource_Kind;
+}
 
 Render_Metal_Buffer :: struct {
     buffer: *void;
-    size:   u64; 
-    kind:   Render_Resource_Kind; 
-} 
+    size:   u64;
+    kind:   Render_Resource_Kind;
+}
 
 Render_Metal_Window_Equip :: struct {
-    layer:          CAMetalLayer; 
-    depth_texture: *void; 
-    size:           Vector2; 
+    layer:          CAMetalLayer;
+    depth_texture: *void;
+    size:           Vector2;
     scale:          float;
-} 
+}
 
 Render_Metal_Pipeline :: struct {
-    pipeline_state:      *void; 
+    pipeline_state:      *void;
     depth_stencil_state: *void;
-} 
+}
 
 Render_Metal_Buffer_Pool_Entry :: struct {
-    buffer:      *void; 
+    buffer:      *void;
     size:         u64;
-    used_size:    u64; 
+    used_size:    u64;
     in_use:       bool;
     reuse_count:  u32;
-} 
+}
 
 Render_Metal_Frame_Data :: struct {
-    semaphore:       *void; 
+    semaphore:       *void;
     command_buffer:  *void;
 
     rect_instance_buffer:      *MTLBuffer;
-    rect_instance_buffer_size: u64; 
+    rect_instance_buffer_size: u64;
     rect_instance_buffer_used: u64;
 
-    mesh_uniform_buffer:      *void; 
+    mesh_uniform_buffer:      *void;
     mesh_uniform_buffer_used: u64;
 
     buffer_pool:            [METAL_BUFFER_POOL_SIZE]Render_Metal_Buffer_Pool_Entry;
     buffer_pool_hit_count:  u32;
-    buffer_pool_miss_count: u32; 
-} 
+    buffer_pool_miss_count: u32;
+}
 
 Render_Metal_State :: struct {
-    pool:                *Flat_Pool; 
+    pool:                *Flat_Pool;
     device:              *MTLDevice;
     command_queue:       *MTLCommandQueue;
-    pipelines:           [Render_Metal_Shader_Kind_COUNT]Render_Metal_Pipeline; 
+    pipelines:           [Render_Metal_Shader_Kind_COUNT]Render_Metal_Pipeline;
     frames:              [METAL_FRAMES_IN_FLIGHT]Render_Metal_Frame_Data;
-    current_frame_index: u32; 
+    current_frame_index: u32;
 
-    rect_vertex_buffer: *MTLBuffer; 
+    rect_vertex_buffer: *MTLBuffer;
 
     blur_temp_texture:      *void;
-    blur_temP_texture_size: Vector2; 
+    blur_temP_texture_size: Vector2;
     blur_sampler:           id;
     font_sampler:           id;
 
@@ -83,13 +82,15 @@ Render_Metal_State :: struct {
     render_pass_geo_desc:   *MTLRenderPassDescriptor;
 
 
-    textures:      [..]Render_Metal_Texure_2D; 
-    buffers:       [..]Render_Metal_Buffer;
-    widow_equiprs: [..]Render_Metal_Window_Equip; 
-} 
+    textures:           [..]Render_Metal_Texure_2D;
+    buffers:            [..]Render_Metal_Buffer;
+    window_equips:      [16]*Render_Metal_Window_Equip;  // Fixed-size array of pointers
+    window_equip_count: u64;
+    window_equip_cap    :u64= 16;
+}
 
-r_metal_state: *Render_Metal_State; 
-metal_initialized := false; 
+r_metal_state: *Render_Metal_State;
+metal_initialized := false;
 
 render_metal_pixel_format_from_tex_2d_format :: (format: Render_Texture_2D_Format) -> MTLPixelFormat {
     if format == {
@@ -107,19 +108,19 @@ render_metal_pixel_format_from_tex_2d_format :: (format: Render_Texture_2D_Forma
         return .MTLPixelFormatRGBA16Unorm;
     case .R32;
         return .MTLPixelFormatR32Float;
-    default:
+    case;
         assert(0 && "Unknown texture format");
         return .MTLPixelFormatRGBA8Unorm;
     }
-} 
+}
 
 render_metal_sample_channel_map_from_tex_2d_format :: (format: Render_Texture_2D_Format) -> Matrix4 {
     m := Matrix4_Identity;
 
     if format == {
-         case; .R8;  #through;
-         case; .R16; #through; 
-         case; .R32;
+        case .R8;  #through;
+        case .R16; #through;
+        case .R32;
              m.coef[0][0] = 1.0;
              m.coef[0][1] = 1.0;
              m.coef[0][2] = 1.0;
@@ -141,9 +142,9 @@ render_metal_sample_channel_map_from_tex_2d_format :: (format: Render_Texture_2D
              m.coef[3][1] = 0.0;
              m.coef[3][2] = 0.0;
              m.coef[3][3] = 1.0;
-    } 
+    }
     return m;
-} 
+}
 
 #scope_export
 
@@ -162,10 +163,10 @@ render_init :: () {
     assert(r_metal_state.device != null);
 
 
-    
+
     r_metal_state.command_queue = MTLDevice.newCommandQueue(r_metal_state.device);
-    assert(r_metal_state.command_queue != null); 
-    
+    assert(r_metal_state.command_queue != null);
+
 
     render_metal_init_shaders();
 
@@ -185,14 +186,14 @@ render_init :: () {
     r_metal_state.font_sampler = MTLDevice.newSamplerStateWithDescriptor(r_metal_state.device, font_sample_desc);
 
     for 0..METAL_FRAMES_IN_FLIGHT-1 {
-        r_metal_state.frames[it].semaphore = dispatch_semaphore_create(1); 
+        r_metal_state.frames[it].semaphore = dispatch_semaphore_create(1);
 
-        rect_buffer_size : u64 = 256 * 1024; 
+        rect_buffer_size : u64 = 256 * 1024;
         r_metal_state.frames[it].rect_instance_buffer_size = rect_buffer_size;
         r_metal_state.frames[it].rect_instance_buffer = r_metal_state.device.newBufferWithLength_options(r_metal_state.device, rect_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
         assert(r_metal_state.frames[it].rect_instance_buffer != null);
 
-        mesh_uniform_buffer_size : u64 = 16 * 1024; 
+        mesh_uniform_buffer_size : u64 = 16 * 1024;
         r_metal_state.frames[it].mesh_uniform_buffer = r_metal_state.device.newBufferWithLength_options(r_metal_state.device, mesh_uniform_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
         assert(r_metal_state.frames[it].mesh_uniform_buffer != null);
 
@@ -201,11 +202,11 @@ render_init :: () {
             r_metal_state.frames[it].buffer_pool[j].buffer = null;
             r_metal_state.frames[it].buffer_pool[j].size   = 0;
             r_metal_state.frames[it].buffer_pool[j].buffer = null;
-        } 
+        }
 
-    } 
+    }
 
-    r_metal_state.current_frame_index = 0; 
+    r_metal_state.current_frame_index = 0;
 
     rect_vertices :=  Vector2.[
         Vector2.{-1.0,  -1.0},
@@ -222,19 +223,129 @@ render_init :: () {
     r_metal_state.render_pass_blur_desc = MTLRenderPassDescriptor.renderPassDescriptor();
     r_metal_state.render_pass_geo_desc  = MTLRenderPassDescriptor.renderPassDescriptor();
 
+    // Initialize window equips array to null
+    for 0..r_metal_state.window_equip_cap-1 {
+        r_metal_state.window_equips[it] = null;
+    }
+
     log("Metal renderer initialized successfully\n");
     log("Using % frames in flight with % maximum drawables", METAL_FRAMES_IN_FLIGHT, METAL_FRAMES_IN_FLIGHT);
-    metal_initialized = true; 
+    metal_initialized = true;
+
+}
+
+render_window_equip :: (handle: Platform_Handle) -> Render_Handle {
+    window := platform_window_from_handle(handle);
+    if window == null {
+        return render_handle_zero();
+    }
+
+    scale := 2.0; // Default for retina display
+
+    // Find free slot (like C version does)
+    slot: u64 = 0;
+    while slot < r_metal_state.window_equip_count {
+        if !r_metal_state.window_equips[slot] {
+            break;
+        }
+        slot += 1;
+    }
+
+    if slot >= r_metal_state.window_equip_cap {
+        assert(false, "Too many window equips");
+        return render_handle_zero();
+    }
+
+    // Update count if we're using a new slot
+    if slot >= r_metal_state.window_equip_count {
+        r_metal_state.window_equip_count = slot + 1;
+    }
+
+    equip := New(Render_Metal_Window_Equip);
+    memset(equip, 0, size_of(Render_Metal_Window_Equip));
+
+    layer := objc_init(objc_alloc(CAMetalLayer));
+    CAMetalLayer.setDevice(layer, r_metal_state.device);
+    CAMetalLayer.setPixelFormat(layer, .MTLPixelFormatBGRA8Unorm);
+    CAMetalLayer.setFramebufferOnly(layer, YES);
+    CAMetalLayer.setDisplaySyncEnabled(layer, NO);
+    CAMetalLayer.setAllowsNextDrawableTimeout(layer, NO);
+    CAMetalLayer.setPresentsWithTransaction(layer, NO);
+    CAMetalLayer.setMaximumDrawableCount(layer, xx 3);
+    CAMetalLayer.setWantsExtendedDynamicRangeContent(layer, NO);
+
+    ns_window    := cast(*NSWindow) window;
+    content_view := NSWindow.contentView(ns_window);
+
+    setLayer_sel := sel_registerName("setLayer:");
+    setLayer_func :: #type (*void, Selector, *void) -> void #c_call;
+    set_layer := cast(setLayer_func) objc_msgSend;
+    set_layer(content_view, setLayer_sel, layer);
+
+    setContentsScale_sel := sel_registerName("setContentsScale:");
+    setContentsScale_func :: #type (*void, Selector, CGFloat) -> void #c_call;
+    set_scale := cast(setContentsScale_func) objc_msgSend;
+    set_scale(layer, setContentsScale_sel, scale);
+
+    frame := NSView.frame(content_view);
+    equip.size = .{xx frame.size.width, xx frame.size.height};
+    equip.scale = scale;
+    drawable_size := NSMakeSize(frame.size.width * scale, frame.size.height * scale);
+    CAMetalLayer.setDrawableSize(layer, drawable_size);
+
+    descriptor_depth := MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped(.MTLPixelFormatDepth32Float, xx drawable_size.width, xx drawable_size.height, NO);
+    MTLTextureDescriptor.setTextureType(descriptor_depth, .MTLTextureType2DMultisample);
+    MTLTextureDescriptor.setSampleCount(descriptor_depth, 4);
+    MTLTextureDescriptor.setUsage(descriptor_depth, .MTLTextureUsageRenderTarget);
+    MTLTextureDescriptor.setStorageMode(descriptor_depth, .MTLStorageModePrivate);
+    equip.depth_texture = xx MTLDevice.newTextureWithDescriptor(r_metal_state.device, descriptor_depth);
+
+    equip.layer = layer;
+    r_metal_state.window_equips[slot] = equip;
+
+    result := render_handle_zero();
+    result.kind = .METAL;
+    result.mtl = cast(*void)(slot + 1);
+    return result;
+}
+
+renderer_window_unequip :: (window: Platform_Handle, window_equip: Render_Handle) {
+    if !r_metal_state || window_equip.kind != .METAL || !window_equip.mtl {
+        return;
+    }
+
+    window_equip_slot := cast(u64)window_equip.mtl - 1;
+
+    if window_equip_slot >= r_metal_state.window_equip_cap {
+        log_error("Invalid window equipment slot %", window_equip_slot);
+        return;
+    }
+
+    metal_window_equip := r_metal_state.window_equips[window_equip_slot];
+    if !metal_window_equip {
+        log_error("Window equipment slot % already released", window_equip_slot);
+        return;
+    }
+
+    // Release Metal objects
+    if metal_window_equip.depth_texture {
+        // TODO: Proper Metal release
+        metal_window_equip.depth_texture = null;
+    }
+
+    // Mark slot as free
+    memset(metal_window_equip, 0, size_of(Render_Metal_Window_Equip));
+    r_metal_state.window_equips[window_equip_slot] = null;
 }
 
 
-// @TODO(Alex) we need to make this more general for the future to 
+// @TODO(Alex) we need to make this more general for the future to
 // accept shaders at runtime and recompile
 render_metal_init_shaders :: () {
-    assert(r_metal_state != null); 
+    assert(r_metal_state != null);
 
     log("Starting Metal shader initialization\n");
-    err := New(NSError); 
+    err := New(NSError);
     push_allocator(temp);
     {  // RECT SHADER
         // @TODO(Alex): this may not work in deployed version need to validate later
@@ -250,21 +361,21 @@ render_metal_init_shaders :: () {
         assert(rect_library != null, "Failed to compile Metal shaders from source");
         vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("rect_vertex_main"));
         fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("rect_fragment_main"));
-        assert(vertex_function && fragment_function, "Failed to find functions"); 
+        assert(vertex_function && fragment_function, "Failed to find functions");
         pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
         MTLRenderPipelineDescriptor.setVertexFunction(pipeline_desc, vertex_function);
         MTLRenderPipelineDescriptor.setFragmentFunction(pipeline_desc, fragment_function);
         color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
         color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
-        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
-        MTLRenderPipelineColorAttachmentDescriptor.setBlendingEnabled(color_attachment_0,            YES);  
-        MTLRenderPipelineColorAttachmentDescriptor.setRgbBlendOperation(color_attachment_0,          .MTLBlendOperationAdd); 
-        MTLRenderPipelineColorAttachmentDescriptor.setAlphaBlendOperation(color_attachment_0,        .MTLBlendOperationAdd); 
-        MTLRenderPipelineColorAttachmentDescriptor.setSourceRGBBlendFactor(color_attachment_0,       .MTLBlendFactorSourceAlpha); 
-        MTLRenderPipelineColorAttachmentDescriptor.setSourceAlphaBlendFactor(color_attachment_0,     .MTLBlendFactorOne); 
-        MTLRenderPipelineColorAttachmentDescriptor.setDestinationRGBBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha); 
-        MTLRenderPipelineColorAttachmentDescriptor.setDestinationAlphaBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha); 
-        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4); 
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);
+        MTLRenderPipelineColorAttachmentDescriptor.setBlendingEnabled(color_attachment_0,            YES);
+        MTLRenderPipelineColorAttachmentDescriptor.setRgbBlendOperation(color_attachment_0,          .MTLBlendOperationAdd);
+        MTLRenderPipelineColorAttachmentDescriptor.setAlphaBlendOperation(color_attachment_0,        .MTLBlendOperationAdd);
+        MTLRenderPipelineColorAttachmentDescriptor.setSourceRGBBlendFactor(color_attachment_0,       .MTLBlendFactorSourceAlpha);
+        MTLRenderPipelineColorAttachmentDescriptor.setSourceAlphaBlendFactor(color_attachment_0,     .MTLBlendFactorOne);
+        MTLRenderPipelineColorAttachmentDescriptor.setDestinationRGBBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha);
+        MTLRenderPipelineColorAttachmentDescriptor.setDestinationAlphaBlendFactor(color_attachment_0,  .MTLBlendFactorOneMinusSourceAlpha);
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4);
         r_metal_state.pipelines[Render_Metal_Shader_Kind.RECT].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
         assert(!error, "Failed to get pipeline state");
         log("Created rect pipeline_state\n");
@@ -283,7 +394,7 @@ render_metal_init_shaders :: () {
         assert(rect_library != null, "Failed to compile Metal shaders from source");
         vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("blur_vertex_main"));
         fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("blur_fragment_main"));
-        assert(vertex_function && fragment_function, "Failed to find functions"); 
+        assert(vertex_function && fragment_function, "Failed to find functions");
 
 
         pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
@@ -292,8 +403,8 @@ render_metal_init_shaders :: () {
 
         color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
         color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
-        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
-        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4); 
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,  xx 4);
         r_metal_state.pipelines[Render_Metal_Shader_Kind.BLUR].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
         assert(!error, "Failed to get pipeline state");
         log("Created blur pipeline_state\n");
@@ -313,21 +424,21 @@ render_metal_init_shaders :: () {
         assert(rect_library != null, "Failed to compile Metal shaders from source");
         vertex_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("mesh_vertex_main"));
         fragment_function := MTLLibrary.newFunctionWithName(rect_library, cast(*NSString) cfstring_from_string("mesh_fragment_main"));
-        assert(vertex_function && fragment_function, "Failed to find functions"); 
+        assert(vertex_function && fragment_function, "Failed to find functions");
         pipeline_desc := cast(*MTLRenderPipelineDescriptor) objc_init(objc_alloc(objc_getClass("MTLRenderPipelineDescriptor")));
 
         offset := 0;
         vertex_desc       := MTLRenderPipelineDescriptor.vertexDescriptor(pipeline_desc);
         vertex_attributes := MTLVertexDescriptor.attributes(vertex_desc);
 
-        // Position 
+        // Position
         vertex_attr_0 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 0);
         MTLVertexAttributeDescriptor.setFormat(vertex_attr_0, .MTLVertexFormatFloat3);
         MTLVertexAttributeDescriptor.setOffset(vertex_attr_0, xx offset);
         MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_0, 0);
         offset += size_of(float) * 3;
 
-        // Texcoord 
+        // Texcoord
         vertex_attr_1 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 1);
         MTLVertexAttributeDescriptor.setFormat(vertex_attr_1, .MTLVertexFormatFloat2);
         MTLVertexAttributeDescriptor.setOffset(vertex_attr_1, xx offset);
@@ -341,7 +452,7 @@ render_metal_init_shaders :: () {
         MTLVertexAttributeDescriptor.setBufferIndex(vertex_attr_2, 0);
         offset += size_of(float) * 3;
 
-        // Color 
+        // Color
         vertex_attr_3 := MTLVertexAttributeDescriptorArray.objectAtIndexedSubscript(vertex_attributes, 3);
         MTLVertexAttributeDescriptor.setFormat(vertex_attr_3, .MTLVertexFormatFloat4);
         MTLVertexAttributeDescriptor.setOffset(vertex_attr_3, xx offset);
@@ -354,16 +465,16 @@ render_metal_init_shaders :: () {
         MTLVertexBufferLayoutDescriptor.setStepRate(vertex_layout_0, xx 1);
         MTLVertexBufferLayoutDescriptor.setStepFunction(vertex_layout_0, .MTLVertexStepFunctionPerVertex);
 
-        
+
         MTLRenderPipelineDescriptor.setVertexFunction(pipeline_desc, vertex_function);
         MTLRenderPipelineDescriptor.setFragmentFunction(pipeline_desc, fragment_function);
 
         color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
         color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
-        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
-        MTLRenderPipelineDescriptor.setDepthAttachmentPixelFormat(pipeline_desc,                     .MTLPixelFormatDepth32Float); 
-        MTLRenderPipelineDescriptor.setRasterizationEnabled(pipeline_desc,                           YES); 
-        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,                              xx 4); 
+        MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);
+        MTLRenderPipelineDescriptor.setDepthAttachmentPixelFormat(pipeline_desc,                     .MTLPixelFormatDepth32Float);
+        MTLRenderPipelineDescriptor.setRasterizationEnabled(pipeline_desc,                           YES);
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,                              xx 4);
         r_metal_state.pipelines[Render_Metal_Shader_Kind.MESH].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
 
         assert(!error, "Failed to get pipeline state");
@@ -376,8 +487,9 @@ render_metal_init_shaders :: () {
 
 #import "Basic";
 #import "Metal";
-#import "Objective_C";
 #import "macos";
+#import "Objective_C";
+#import "Objective_C/AppKit";
 #import "Flat_Pool";
 #import "Math";
 #import "File";

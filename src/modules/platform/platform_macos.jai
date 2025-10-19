@@ -6,8 +6,9 @@
 
 platform_initialized := false;
 window_should_close := false;
-main_window: *NSWindow;
+main_window: Platform_Handle;
 platform_resize_cb: Platform_Resize_Callback;
+
 
 OBJC_ASSOCIATION_ASSIGN :: 1;
 OBJC_ASSOCIATION_RETAIN_NONATOMIC :: 1;
@@ -114,7 +115,7 @@ init_mac_platform :: () {
     platform_initialized = true;
 }
 
-platform_create_window :: (width: int, height: int, title: string) -> Window_Type, bool {
+platform_create_window :: (width: int, height: int, title: string) -> Platform_Handle, bool {
     init_mac_platform();
     
     screen := NSScreen.mainScreen();
@@ -188,27 +189,41 @@ platform_create_window :: (width: int, height: int, title: string) -> Window_Typ
     
     NSWindow.makeKeyAndOrderFront(window, null);
     
-    main_window = window;
+    main_window = platform_handle_from_native_window(window);
+
+    ret_window :Platform_Handle;
+    memcpy(*ret_window, *main_window, size_of(Platform_Handle));
     
     input_application_has_focus = true;
     
     
-    return window, true; 
+    return ret_window, true; 
 }
 
 platform_events_this_frame: [..] Event;
 
-platform_get_window_size :: (window: Window_Type) -> (s32, s32, s32, s32, bool)  {
-    x, y, w, h, success := get_dimensions(window, false);
+platform_get_window_size :: (window: Platform_Handle) -> (s32, s32, s32, s32, bool)  {
+    x, y, w, h, success := get_dimensions(window.window_type, false);
     return x, y, w, h, success;
 }
 
+platform_window_from_handle :: (a: Platform_Handle) -> Window_Type {
+    return cast(Window_Type)a.window_type;
+} 
+
+platform_handle_from_native_window :: (a: Window_Type) -> Platform_Handle {
+    handle: Platform_Handle;
+    handle.window_type = a;
+    return handle; 
+} 
+
 platform_process_events_this_frame :: () {
     update_window_events();
+    window := platform_window_from_handle(main_window); 
     array_copy(*platform_events_this_frame, events_this_frame);
 
     for get_window_resizes() {
-        if (it.window == main_window) {
+        if (it.window == window) {
             if platform_resize_cb {
                 platform_resize_cb(main_window, it.width, it.height);
             } 
@@ -216,8 +231,8 @@ platform_process_events_this_frame :: () {
     } 
 }
 
-platform_get_mouse_pointer_position :: (window: Window_Type, right_handed: bool) -> int, int, bool {
-   x ,y, success :=  get_mouse_pointer_position(window, right_handed);
+platform_get_mouse_pointer_position :: (window: Platform_Handle, right_handed: bool) -> int, int, bool {
+   x ,y, success :=  get_mouse_pointer_position(window.window_type, right_handed);
    return x, y, success;
 } 
 
@@ -263,10 +278,10 @@ create_menu_bar :: () {
 }
 
 
-platform_get_dpi_scale :: (window: Window_Type) -> float {
+platform_get_dpi_scale :: (window: Platform_Handle) -> float {
     if !window return 1.0;
 
-    ns_window := cast(*NSWindow) window;
+    ns_window := cast(*NSWindow) window.window_type;
 
     // Get the backing scale factor for Retina displays
     // NSWindow inherits backingScaleFactor from NSView

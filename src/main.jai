@@ -1,6 +1,5 @@
 #import "Basic"; 
-#import "platform"; 
-#import "render";
+#load "./modules/module.jai"; 
 
 
 App_State :: struct {
@@ -12,15 +11,18 @@ app_state: *App_State = null;
 
 
 main :: () {
-    window, window_ok := platform_create_window(800, 880, "Demo"); 
+    window, window_ok := platform_create_window(800, 880, "Demo");
     if !window_ok {
-        log_error("Failed to create window\n"); 
+        log_error("Failed to create window\n");
         return;
-    } 
+    }
 
-    app_state = New(App_State); 
+    app_state = New(App_State);
+
+    // Initialize the Metal renderer before equipping the window
     render_init();
 
+    window_equip := render_window_equip(window);
 
 
     while app_state.running {

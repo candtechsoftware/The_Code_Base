@@ -3,7 +3,6 @@
     case .MACOS; #load "render_metal.jai";
 }
 
-
 Render_Resource_Kind :: enum {
     STATIC; 
     DYNAMIC; 
@@ -25,11 +24,18 @@ Render_Geo_Topology_Kind :: enum  {
 
 RENDER_GEO_TOPOLOGY_KIND_COUNT :: #run enum_highest_value(Render_Geo_Topology_Kind) + 1;
 
-Render_Handle :: union {
-    u64s: [1]u64; 
-    u32s: [2]u32;
-    u16s: [3]u16;
-} 
+Renderer_Backend_Kind :: enum {
+    VULKAN;
+    METAL;
+};
+
+Render_Handle :: struct {
+    kind: Renderer_Backend_Kind = .METAL;
+    union {
+        mtl: *void; 
+        vk:   u64;
+    };
+};
 
 Render_Rect_2D_Instance :: struct {
     dst:              Rng2; 
@@ -174,36 +180,29 @@ Render_Pass_Node :: struct {
 } 
 
 Render_Pass_List :: struct {
-    first: *Render_Pass_Node; 
-    last:  *Render_Pass_Node;
-    count: u64; 
+    pool:      *Flat_Pool; 
+    allocator:  Allocator; 
+    first:     *Render_Pass_Node; 
+    last:      *Render_Pass_Node;
+    count:     u64; 
 } 
 
-render_sample_channel_map_from_texture :: (fmt: Render_Texture_2D_Format) -> Matrix4 {
-    res := Matrix4_Identity();
-    if fmt == {
-    case .R8; {
-            res.v[0] = .{1, 1, 1, 1}; 
-        } 
-    case; 
-    } 
-} 
 
 render_handle_zero :: () -> Render_Handle {
     r: Render_Handle; 
     return r;
 } 
 
-operator == :: (a: *Render_Handle, b: *Render_Handle) {
+operator == :: (a: *Render_Handle, b: *Render_Handle) -> bool {
     return memcmp(a, b, size_of(Render_Handle)) == 0; 
 } 
 
 render_batch_list_create :: (instance_size: u64) -> Render_Batch_List {
     r: Render_Batch_List;
-    list.bytes_per_instance = instance_size; 
-    pool                    := New(Flat_Pool);  // @TODO: should create own arena
-    list.allocator          = Allocator.{flat_pool_allocator_proc, pool};
-    return list; 
+    r.bytes_per_instance = instance_size;
+    pool                 := New(Flat_Pool);  // @TODO: should create own arena
+    r.allocator = Allocator.{flat_pool_allocator_proc, pool};
+    return r;
 } 
 
 render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) -> *void {
@@ -212,20 +211,21 @@ render_batch_list_push :: (list: *Render_Batch_List, batch_instance_cap: u64) ->
     {
         n := list.last;
         if n == null || n.v.byte_count + list.bytes_per_instance > n.v.byte_cap {
-            n = New(Render_Batch_Node);
-            n.v.byte_cap = batch_instance_cap * list.bytes_per_instance; 
-            n.v.v = NewArray(n.v.byte_cap, u8);
-            link_list_push(list.first, list.last, n); 
-            list.batch_count += 1; 
+            n = New(Link_List_Node(Render_Batch));
+            n.v.byte_cap = batch_instance_cap * list.bytes_per_instance;
+            n.v.v = NewArray(xx n.v.byte_cap, u8);
+            link_list_push(list, n);
+            list.batch_count += 1;
         }    
-        instance = n.v.v + n.v.byte_count; 
-        n.v.byte_count += list.bytes_per_instance; 
+        instance = n.v.v.data + n.v.byte_count;
+        n.v.byte_count += list.bytes_per_instance;
         list.byte_count += list.bytes_per_instance;
     } 
     return instance;
 } 
 
 render_pass_from_kind :: (list: *Render_Pass_List, kind: Render_Pass_Kind) -> *Render_Pass {
+    
     push_allocator(list.allocator);
     new_node := New(Render_Pass_Node); 
     new_node.next = null;
@@ -234,7 +234,8 @@ render_pass_from_kind :: (list: *Render_Pass_List, kind: Render_Pass_Kind) -> *R
         list.last.next = new_node; 
         list.last = new_node; 
     } else {
-        list.first = list.last = new_node; 
+        list.last = new_node; 
+        list.first = list.last;
     } 
 
     list.count += 1;
@@ -273,6 +274,5 @@ render_pass_from_kind :: (list: *Render_Pass_List, kind: Render_Pass_Kind) -> *R
 
 
 #import "Math";
-#import "Basic"; 
+#import "Basic";
 #import "Flat_Pool";
-#import "base";

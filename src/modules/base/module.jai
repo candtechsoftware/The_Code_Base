@@ -1,3 +1,5 @@
+#scope_export
+
 #load "math.jai";
 #load "types.jai";
 #load "util.jai";

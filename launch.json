@@ -1,0 +1,7 @@
+{
+  "key_map": {
+    "<F1>": "jai build.jai",
+    "<F2>": "jai build.jai && ./build/main"
+  }
+}
+

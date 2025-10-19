@@ -20,7 +20,7 @@ clamp_bot :: inline (x: $t, b: t) -> t {
 }
 
 
-memory_zero :: inline (s: *void, z: u64) {
+memory_zero :: inline (s: *void, z: s64) {
     memset(s, 0, z);
 }
 
@@ -28,30 +28,21 @@ memory_zero_struct :: inline (s: *$t) {
     memset(s, 0, size_of(t));
 }
 
-memory_copy :: inline (dst: *void, src: *void, size: u64) {
-    memmove(dst, src, size);
+memory_copy :: inline (dst: *void, src: *void, size: s64) {
+    memcpy(dst, src, size);
 }
 
-memory_set :: inline (dst: *void, byte: u8, size: u64) {
+memory_set :: inline (dst: *void, byte: u8, size: s64) {
     memset(dst, byte, size);
 }
 
-memory_compare :: inline (a: *void, b: *void, size: u64) -> s32 {
+memory_compare :: inline (a: *void, b: *void, size: s64) -> s32 {
     return memcmp(a, b, size);
 }
 
 align_pow2 :: inline (x: u64, b: u64) -> u64 {
     return (x + b - 1) & ~(b - 1);
 }
-
-
-#import "Basic"; 
-
-Render_Handle :: union {
-    u64s: [1]u64; 
-    u32s: [2]u32;
-    u16s: [3]u16;
-} 
 
 
 #import "Basic";

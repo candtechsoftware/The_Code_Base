@@ -22,4 +22,6 @@ make_rng2 :: (x0: float, y0: float, x1: float, y1: float) -> Rng2 {
  
     
 
-    
+Vec2 :: struct(T: Type) {
+    x, y: T;
+} 
