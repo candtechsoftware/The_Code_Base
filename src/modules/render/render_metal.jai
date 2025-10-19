@@ -361,10 +361,9 @@ render_metal_init_shaders :: () {
         color_attachments := MTLRenderPipelineDescriptor.colorAttachments(pipeline_desc);
         color_attachment_0 := MTLRenderPipelineColorAttachmentDescriptorArray.objectAtIndexedSubscript(color_attachments,0);
         MTLRenderPipelineColorAttachmentDescriptor.setPixelFormat(color_attachment_0,                .MTLPixelFormatBGRA8Unorm);  
-
-        MTLRenderPipelineDescriptor.setDepthAttachmentPixelFormat(pipeline_desc,    .MTLPixelFormatDepth32Float); 
-        MTLRenderPipelineDescriptor.setRasterizationEnabled(pipeline_desc,          YES); 
-        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,             xx 4); 
+        MTLRenderPipelineDescriptor.setDepthAttachmentPixelFormat(pipeline_desc,                     .MTLPixelFormatDepth32Float); 
+        MTLRenderPipelineDescriptor.setRasterizationEnabled(pipeline_desc,                           YES); 
+        MTLRenderPipelineDescriptor.setRasterSampleCount(pipeline_desc,                              xx 4); 
         r_metal_state.pipelines[Render_Metal_Shader_Kind.MESH].pipeline_state = MTLDevice.newRenderPipelineStateWithDescriptor_error(r_metal_state.device,pipeline_desc, *error);
 
         assert(!error, "Failed to get pipeline state");
