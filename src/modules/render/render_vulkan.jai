@@ -123,14 +123,14 @@ validation_layers  :: string.["VK_LAYER_KHRONOS_validation"];
 device_extensions  :: string.[VK_KHR_SWAPCHAIN_EXTENSION_NAME];
 
 
-debug_callback :: (severity: VkDebugUtilsMessageServerityFlagBitsEXT,type VkDebugUtilsTypeFlagsEXT, callback_data: VkDebugUtilsMessengerCallbackDataEXT, user_data: *void) {
-    log_error("Vulkan validation %\n", callback_data.pMessage); 
+debug_callback :: (severity: VkDebugUtilsMessageServerityFlagBitsEXT, type: VkDebugUtilsTypeFlagsEXT, callback_data: VkDebugUtilsMessengerCallbackDataEXT, user_data: *void) {
+    log_error("Vulkan validation %\n", callback_data.pMessage);
 } 
 
 
 
-render_vulkan_format_from_texture_2d_format ::(fomat: Render_Texture_2D_Format) -> VkFormat {
-    if format ==  {
+render_vulkan_format_from_texture_2d_format :: (format: Render_Texture_2D_Format) -> VkFormat {
+    if format == {
     case .R8;
         return VK_FORMAT_R8_UNORM;
     case .RG8;
@@ -145,7 +145,7 @@ render_vulkan_format_from_texture_2d_format ::(fomat: Render_Texture_2D_Format) 
         return VK_FORMAT_R16G16B16A16_UNORM;
     case .R32;
         return VK_FORMAT_R32_SFLOAT;
-    default:
+    case;
         return VK_FORMAT_R8G8B8A8_UNORM;
     }
 }
@@ -170,13 +170,13 @@ render_vulkan_create_buffer :: (size: VkDeviceSize, usage: VkBufferUsageFlags, p
 
     assert(vkCreateBuffer(r_vulkan_state.device,*buffer_info, null, buffer) != VK_SUCCESS, "Failed to create buffer"); 
 
-    mem_reqs: VkMemoryRequirements; 
+    mem_reqs: VkMemoryRequirements;
     vkGetBufferMemoryRequirements(r_vulkan_state.device, *buffer, *mem_reqs);
 
-    alloc_info: VkMemoryAllocateInfo; 
+    alloc_info: VkMemoryAllocateInfo;
     alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_requirements.size;
-    alloc_info.memoryTypeIndex = renderer_vulkan_find_memory_type(mem_requirements.memoryTypeBits, properties);
+    alloc_info.allocationSize = mem_reqs.size;
+    alloc_info.memoryTypeIndex = renderer_vulkan_find_memory_type(mem_reqs.memoryTypeBits, properties);
 
     assert(vkAllocateMemory(r_vulkan_state.device, *alloc_info, null, buffer_memory) == VK_SUCCESS); 
 
@@ -184,7 +184,7 @@ render_vulkan_create_buffer :: (size: VkDeviceSize, usage: VkBufferUsageFlags, p
 } 
 
 
-render_vulkan_create_image :: (width: u32, height: u32, format: VkFormat, tiling: VkImageTiling, usage: VkImageUsageFlags, VkMemoryPropertyFlags properties, image: *VkImage, image_memory: *VkDeviceMemory) {
+render_vulkan_create_image :: (width: u32, height: u32, format: VkFormat, tiling: VkImageTiling, usage: VkImageUsageFlags, properties: VkMemoryPropertyFlags, image: *VkImage, image_memory: *VkDeviceMemory) {
     image_info: VkImageCreateInfo;  
     image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
     image_info.imageType = VK_IMAGE_TYPE_2D;
@@ -203,13 +203,13 @@ render_vulkan_create_image :: (width: u32, height: u32, format: VkFormat, tiling
     assert(VkCreateImage(r_vulkan_state.device, *image_info, null, image) == VK_SUCCESS);
 
 
-    mem_reqs: VkMemoryRequirements; 
+    mem_reqs: VkMemoryRequirements;
     vkGetImageMemoryRequirements(r_vulkan_state.device, *image, *mem_reqs);
 
     alloc_info: VkMemoryAllocateInfo;
     alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-    alloc_info.allocationSize = mem_requirements.size;
-    alloc_info.memoryTypeIndex = renderer_vulkan_find_memory_type(mem_requirements.memoryTypeBits, properties);
+    alloc_info.allocationSize = mem_reqs.size;
+    alloc_info.memoryTypeIndex = renderer_vulkan_find_memory_type(mem_reqs.memoryTypeBits, properties);
 
     assert(vkAllocateMemory(r_vulkan_state.device, *alloc_info, null, image_memory) != VK_SUCCESS)
     vkBindImageMemory(r_vulkan_state.device, *image, *image_memory, 0);
@@ -252,7 +252,7 @@ renderer_vulkan_begin_single_time_commands :: () -> VkCommandBuffer {
     return command_buffer;
 }
 
-void renderer_vulkan_end_single_time_commands:: (command_buffer: VkCommandBuffer) {
+renderer_vulkan_end_single_time_commands :: (command_buffer: VkCommandBuffer) {
     vkEndCommandBuffer(command_buffer);
     submit_info: VkSubmitInfo;
     submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
