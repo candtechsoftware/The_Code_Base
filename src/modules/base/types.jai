@@ -8,6 +8,11 @@ Corner :: enum  {
 
 CORNER_COUNT :: #run enum_highest_value(Corner) + 1;
 
+Axis :: enum { X; Y; Z; W; } 
+
+Side :: enum { MIN; MAX; } 
+
+
 
 #import "Basic";
 

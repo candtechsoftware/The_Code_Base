@@ -1,5 +1,5 @@
 #import "Basic"; 
-#load "./modules/module.jai"; 
+#import,file "./modules/module.jai"; 
 
 
 App_State :: struct {

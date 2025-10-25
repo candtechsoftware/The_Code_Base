@@ -349,7 +349,6 @@ render_vulkan_create_shader_module :: (code: string, size: u64) {
 
 
 
-#scope_file
 // @TODO(Alex) make this more portable!
 compile_glsl_to_spriv :: (source: string, stage: VkShaderStageFlagBits, spriv_buffer: *u32, spriv_size: u64, max_size: u64) -> bool {
     #if OS == .LINUX {

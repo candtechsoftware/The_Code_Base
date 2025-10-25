@@ -1,9 +1,9 @@
-#scope_file
 
 METAL_FRAMES_IN_FLIGHT          :: 2;
 METAL_BUFFER_POOL_SIZE          :: 256;
 METAL_BUFFER_POOL_MIN_SIZE      :: (16 * 1024);
 METAL_BUFFER_POOL_GROWTH_FACTOR :: 2;
+
 Render_Metal_Shader_Kind :: enum {
     RECT;
     BLUR;
@@ -20,10 +20,19 @@ Render_Metal_Texure_2D :: struct {
     kind:     Render_Resource_Kind;
 }
 
+operator == :: (a: Render_Metal_Texure_2D, b: Render_Metal_Texure_2D) -> bool {
+    return a.texture == b.texture && a.kind == b.kind; 
+}
+
+
 Render_Metal_Buffer :: struct {
     buffer: *void;
     size:   u64;
     kind:   Render_Resource_Kind;
+}
+
+operator == :: (a: Render_Metal_Buffer, b: Render_Metal_Buffer) -> bool {
+    return a.buffer == b.buffer && a.kind == b.kind; 
 }
 
 Render_Metal_Window_Equip :: struct {
@@ -82,8 +91,8 @@ Render_Metal_State :: struct {
     render_pass_geo_desc:   *MTLRenderPassDescriptor;
 
 
-    textures:           [..]Render_Metal_Texure_2D;
-    buffers:            [..]Render_Metal_Buffer;
+    textures:           [..]*Render_Metal_Texure_2D;
+    buffers:            [..]*Render_Metal_Buffer;
     window_equips:      [16]*Render_Metal_Window_Equip;  // Fixed-size array of pointers
     window_equip_count: u64;
     window_equip_cap    :u64= 16;
@@ -146,8 +155,6 @@ render_metal_sample_channel_map_from_tex_2d_format :: (format: Render_Texture_2D
     return m;
 }
 
-#scope_export
-
 render_init :: () {
     assert(!metal_initialized, "Metal is already initialized");
 
@@ -190,11 +197,11 @@ render_init :: () {
 
         rect_buffer_size : u64 = 256 * 1024;
         r_metal_state.frames[it].rect_instance_buffer_size = rect_buffer_size;
-        r_metal_state.frames[it].rect_instance_buffer = r_metal_state.device.newBufferWithLength_options(r_metal_state.device, rect_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
+        r_metal_state.frames[it].rect_instance_buffer = MTLDevice.newBufferWithLength_options(r_metal_state.device, rect_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
         assert(r_metal_state.frames[it].rect_instance_buffer != null);
 
         mesh_uniform_buffer_size : u64 = 16 * 1024;
-        r_metal_state.frames[it].mesh_uniform_buffer = r_metal_state.device.newBufferWithLength_options(r_metal_state.device, mesh_uniform_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
+        r_metal_state.frames[it].mesh_uniform_buffer = MTLDevice.newBufferWithLength_options(r_metal_state.device, mesh_uniform_buffer_size, .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined);
         assert(r_metal_state.frames[it].mesh_uniform_buffer != null);
 
 
@@ -216,8 +223,8 @@ render_init :: () {
     ];
     rect_vertices_size : u64 = size_of(Vector2) * rect_vertices.count;
 
-    r_metal_state.rect_vertex_buffer = r_metal_state.device.newBufferWithBytes_length_options(r_metal_state.device, *rect_vertices, rect_vertices_size, .MTLResourceStorageModeManaged);
-    r_metal_state.rect_vertex_buffer.didModifyRange(r_metal_state.rect_vertex_buffer, xx .{0 , rect_vertices_size});
+    r_metal_state.rect_vertex_buffer = MTLDevice.newBufferWithBytes_length_options(r_metal_state.device, *rect_vertices, rect_vertices_size, .MTLResourceStorageModeManaged);
+    MTLBuffer.didModifyRange(r_metal_state.rect_vertex_buffer, xx .{0, rect_vertices_size});
 
     r_metal_state.render_pass_ui_desc   = MTLRenderPassDescriptor.renderPassDescriptor();
     r_metal_state.render_pass_blur_desc = MTLRenderPassDescriptor.renderPassDescriptor();
@@ -337,6 +344,208 @@ renderer_window_unequip :: (window: Platform_Handle, window_equip: Render_Handle
     memset(metal_window_equip, 0, size_of(Render_Metal_Window_Equip));
     r_metal_state.window_equips[window_equip_slot] = null;
 }
+
+
+render_metal_texture_format_mul :: inline (format: Render_Texture_2D_Format) -> u32 {
+    if format == {
+            case .R8; return 1;
+
+            case .RG8; #through;
+            case .R16; return 2;
+
+            case .RGBA8; #through;
+            case .R32;   #through;
+            case .BGRA8; return 4;
+            case .RGBA16; return 8; 
+    } 
+
+    return 1;
+} 
+
+render_texture_2D_alloc :: (kind: Render_Resource_Kind, size: Vec2(float64), format: Render_Texture_2D_Format, data: *void) -> Render_Handle {
+    alloc := Allocator.{flat_pool_allocator_proc, r_metal_state.pool}; 
+    push_allocator(alloc);
+
+    texture := array_add(*r_metal_state.textures); 
+    memset(texture, 0, size_of(Render_Metal_Texure_2D));
+
+    texture.*.size   = size;
+    texture.*.format = format;
+    texture.*.kind   = kind;
+
+
+    desc := MTLTextureDescriptor.texture2DDescriptorWithPixelFormat_width_height_mipmapped(
+        render_metal_pixel_format_from_tex_2d_format(format),
+        xx size.x,
+        xx size.y,
+        NO, 
+    );
+
+    
+    if kind == .DYNAMIC {
+        MTLTextureDescriptor.setUsage(desc, .MTLTextureUsageShaderWrite);
+    } else {
+        MTLTextureDescriptor.setUsage(desc, .MTLTextureUsageShaderRead);
+    }
+    
+
+    text_id := MTLDevice.newTextureWithDescriptor(r_metal_state.device, desc);
+    texture.*.texture = text_id;
+
+    bytes_per_row := xx size.x * render_metal_texture_format_mul(format);
+
+    sample_desc := objc_init(objc_alloc(MTLSamplerDescriptor));
+    MTLSamplerDescriptor.setMinFilter(sample_desc, .MTLSamplerMinMagFilterLinear);
+    MTLSamplerDescriptor.setMagFilter(sample_desc, .MTLSamplerMinMagFilterLinear);
+    MTLSamplerDescriptor.setSAddressMode(sample_desc, .MTLSamplerAddressModeClampToEdge);
+    MTLSamplerDescriptor.setTAddressMode(sample_desc, .MTLSamplerAddressModeClampToEdge);
+
+    texture.*.sampler = MTLDevice.newSamplerStateWithDescriptor(r_metal_state.device, sample_desc);
+
+    handle := render_handle_zero();
+    handle.kind = .METAL;
+    handle.mtl = texture;
+
+    return handle;
+}
+
+
+render_texture_2D_release :: (handle: Render_Handle) {
+    if handle.mtl == null {
+        log("texture is null could have already been released\n");
+    }
+
+    texture := render_metal_texture_find(handle);
+    if !texture return;
+
+    if texture.texture {
+        release(texture.texture);
+    }
+
+    if texture.sampler {
+        release(texture.sampler);
+    }
+}
+
+render_buffer_alloc :: (kind: Render_Resource_Kind, size: u64, data: *void) -> Render_Handle {
+    if !r_metal_state {
+        return render_handle_zero();
+    }
+
+    slot: s64 = 0;
+    while slot < xx r_metal_state.buffers.count {
+        if !r_metal_state.buffers[slot].buffer {
+            break;
+        }
+        slot += 1;
+    }
+
+    if slot >= r_metal_state.buffers.count {
+        alloc := Allocator.{flat_pool_allocator_proc, r_metal_state.pool};
+        push_allocator(alloc);
+        array_add(*r_metal_state.buffers);
+    }
+
+    buf := r_metal_state.buffers[slot];
+    memset(*buf, 0, size_of(Render_Metal_Buffer));
+
+    buf.size = size;
+    buf.kind = kind;
+
+    options: MTLResourceOptions;
+    if kind == .DYNAMIC {
+        options = .MTLResourceStorageModeShared | .MTLResourceCPUCacheModeWriteCombined;
+    } else {
+        options = .MTLResourceStorageModeManaged;
+    }
+
+    if data {
+        buf.buffer = MTLDevice.newBufferWithBytes_length_options(r_metal_state.device, data, size, options);
+
+        if kind == .STATIC {
+            MTLBuffer.didModifyRange(buf.buffer, xx .{0, size});
+        }
+    } else {
+        buf.buffer = MTLDevice.newBufferWithLength_options(r_metal_state.device, size, options);
+    }
+
+    handle := render_handle_zero();
+    handle.kind = .METAL;
+    handle.mtl = buf;
+    return handle;
+}
+
+render_buffer_release :: (handle: Render_Handle) {
+    if !r_metal_state || handle.mtl == null {
+        return;
+    }
+
+    buf := cast(*Render_Metal_Buffer) handle.mtl;
+    found, idx := base_array_find(r_metal_state.buffers, buf);
+    if !found {
+        log("Buffer was not found\n");
+        return;
+    }
+
+    if buf.buffer {
+        release(buf.buffer);
+    }
+
+    memset(buf, 0, size_of(Render_Metal_Buffer));
+}
+
+
+// @Speed we can do better than a linear scan
+render_metal_texture_find :: (handle: Render_Handle) -> *Render_Metal_Texure_2D {
+    tex := cast(*Render_Metal_Texure_2D) handle.mtl;
+    found, idx := base_array_find(r_metal_state.textures, tex); 
+    if !found {
+        log("Texture was not found\n");
+        return null;
+    } 
+    return r_metal_state.textures[idx];
+} 
+
+render_kind_from_texture_2D :: (handle: Render_Handle) -> Render_Resource_Kind {
+    if handle.mtl == null {
+        return .STATIC;
+    } 
+
+    tex := render_metal_texture_find(handle);
+    return ifx tex then tex.kind else .STATIC;
+}
+
+
+render_format_from_texture_2D :: (handle: Render_Handle) -> Render_Texture_2D_Format {
+    if handle.mtl == null {
+        return .RGBA8;
+    }
+    tex := render_metal_texture_find(handle);
+    return ifx tex then tex.format else .RGBA8;
+}
+
+
+render_fill_texture_2D_region :: (handle: Render_Handle, sub_rect: Rng2, data: *void) {
+    if data == null || handle.mtl == null return;
+
+    tex := render_metal_texture_find(handle);
+
+    if !tex.texture  return;
+
+    bytes_per_row := cast(u64)(sub_rect.max.x - sub_rect.min.x) * xx render_metal_texture_format_mul(tex.format);
+
+    region := MTLRegionMake2D(xx sub_rect.min.x, xx sub_rect.min.y, xx (sub_rect.max.x - sub_rect.min.x), xx (sub_rect.max.y - sub_rect.min.y));
+    MTLTexture.replaceRegion_mipmapLevel_slice_withBytes_bytesPerRow_bytesPerImage(
+        tex.texture,
+        region,
+        0,
+        0,
+        data,
+        bytes_per_row,
+        0);
+
+}
+
 
 
 // @TODO(Alex) we need to make this more general for the future to
